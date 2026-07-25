@@ -1,3 +1,50 @@
+## The core problem being solved
+
+A single LLM call asked to "write a good bedtime story" is unreliable — quality varies, and there's no mechanism to catch or fix a bad output. The whole system exists to add **quality control** and **structure** around a model that itself never changes.
+
+## The main components
+
+**1. Categorizer**
+- Classifies the user's free-text request into one of 6 story categories (hero-adventure, animal/jungle, family, sports-inspirational, life-lesson, general/fantasy fallback)
+- Done via an LLM call rather than keyword matching, because a request like "a girl who learns to be brave" has no adventure-related keywords but clearly belongs there — only genuine understanding catches that correctly
+
+**2. Generator**
+- Builds the actual story prompt using the category's "arc": a fixed 4-stage plot skeleton (introduce → problem → attempt → resolve), combined with a randomly-picked setting, problem, and resolution style from that category's pool
+- The pool exists specifically so the same category doesn't produce the same story shape every time — a rigid single template collapses into repetition
+- Also supports an optional regional/cultural style (Indian / Western-American / no preference)
+- Every story ends with the same "cozy wind-down" beat, regardless of category, since these are bedtime stories
+
+**3. Judge**
+- A second LLM call that critiques the story against a rubric: readability, purpose, engagement, length, structure — each scored 1–10, combined into a weighted average
+- **Safety is handled completely separately as a hard pass/fail gate** — never averaged in with quality scores, so a story can never "buy back" a safety failure with strong scores elsewhere
+- If the judge's own response can't be parsed correctly, the system treats that as a safety failure rather than assuming the story is fine — fails safe, not open
+
+## The retry logic
+
+- If the judge fails a draft, the system checks *why* it failed and responds differently depending on the reason:
+  - **Safety failure** → regenerate a brand new story from scratch, explicitly avoiding the flagged issue — patching an unsafe premise just papers over it
+  - **Quality-only failure** → revise the existing draft with targeted feedback, preserving what already worked
+- Capped at 2 retries total, to keep cost and latency bounded
+
+## The fallback logic
+
+- If retries run out without a pass: serve the best-scoring attempt, but **only from attempts that actually passed safety** — a high quality score can never make an unsafe draft the "winner"
+- If nothing ever passed safety across all attempts, fall back to a fixed, pre-written safe story rather than risk showing anything model-generated
+
+## The user feedback loop
+
+- After a story is shown, the user can request changes
+- Every revision is re-judged before being shown — if the requested change would make the story unsafe, the system refuses and keeps the previous version instead of complying blindly
+
+## Why this design overall
+
+- It demonstrates the **generator–critic pattern** (one call produces, another checks, code decides what happens next) — a common real-world pattern for adding reliability to LLM systems
+- It treats **safety as categorically different from quality** throughout — never scored on the same scale, never averaged, never overridden by anything else, including user requests
+- It adds variety (arc pools + repetition avoidance) and personalization (regional style) without touching the model itself — all the improvement comes from prompting and orchestration, per the assignment's constraint
+
+
+___________________________________________________________________
+
 # Hippocratic AI Coding Assignment
 Welcome to the [Hippocratic AI](https://www.hippocraticai.com) coding assignment
 
